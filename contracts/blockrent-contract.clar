@@ -199,3 +199,75 @@
           (ok "Lease emergency terminated"))
         (err "Unauthorized emergency termination"))))
 
+(define-public (update-property (property-id uint) (monthly-rent uint) (security-deposit uint) (description (string-ascii 500)))
+  (let ((owner (unwrap! (map-get? property-owners property-id) (err "Property not found")))
+        (available (default-to false (map-get? property-availability property-id))))
+    (if (and (is-eq tx-sender owner)
+             available)
+        (begin
+          (map-set property-rents property-id monthly-rent)
+          (map-set property-deposits property-id security-deposit)
+          (map-set property-descriptions property-id description)
+          (ok "Property updated successfully"))
+        (err "Unauthorized or property not available"))))
+
+(define-public (withdraw-escrow (lease-id uint))
+  (let ((lease-data-owner (unwrap! (map-get? lease-properties lease-id) (err "Lease not found")))
+        (property-owner (unwrap! (map-get? property-owners lease-data-owner) (err "Property not found")))
+        (status (default-to "invalid" (map-get? lease-statuses lease-id))))
+    (if (and (is-eq tx-sender property-owner)
+             (or (is-eq status "ended")
+                 (is-eq status "terminated")
+                 (is-eq status "emergency-terminated")))
+        (let ((escrow-balance (default-to u0 (map-get? lease-escrow-balances lease-id))))
+          (begin
+            (map-set escrow-balances lease-id u0)
+            (map-set lease-escrow-balances lease-id u0)
+            (ok (tuple
+              (withdrawn escrow-balance)
+              (status "withdrawn")
+            ))))
+        (err "Unauthorized or lease not ended"))))
+
+;; read-only functions
+(define-read-only (get-property-owner (property-id uint))
+  (map-get? property-owners property-id))
+
+(define-read-only (get-property-address (property-id uint))
+  (map-get? property-addresses property-id))
+
+(define-read-only (get-property-rent (property-id uint))
+  (map-get? property-rents property-id))
+
+(define-read-only (get-property-deposit (property-id uint))
+  (map-get? property-deposits property-id))
+
+(define-read-only (get-property-available (property-id uint))
+  (map-get? property-availability property-id))
+
+(define-read-only (get-property-description (property-id uint))
+  (map-get? property-descriptions property-id))
+
+(define-read-only (get-lease-property (lease-id uint))
+  (map-get? lease-properties lease-id))
+
+(define-read-only (get-lease-tenant (lease-id uint))
+  (map-get? lease-tenants lease-id))
+
+(define-read-only (get-lease-rent (lease-id uint))
+  (map-get? lease-rents lease-id))
+
+(define-read-only (get-lease-status (lease-id uint))
+  (map-get? lease-statuses lease-id))
+
+(define-read-only (get-escrow-balance (lease-id uint))
+  (map-get? escrow-balances lease-id))
+
+(define-read-only (get-rent-payment (payment-id uint))
+  (map-get? rent-payments payment-id))
+
+(define-read-only (get-property-count)
+  (var-get property-counter))
+
+(define-read-only (get-lease-count)
+  (var-get lease-counter))
